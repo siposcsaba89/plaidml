@@ -7,4 +7,5 @@
 namespace pmlc::conversion::stripe_to_spirv {
 
 mlir::OwningModuleRef StripeLowerIntoSPIRV(mlir::ModuleOp workspace);
+
 }  // namespace pmlc::conversion::stripe_to_spirv

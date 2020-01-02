@@ -6,16 +6,26 @@
 #include <unordered_set>
 #include <vector>
 
-#include "llvm/Support/FormatVariadic.h"
-
+#include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
+#include "mlir/Conversion/LoopToStandard/ConvertLoopToStandard.h"
+#include "mlir/Conversion/StandardToSPIRV/ConvertStandardToSPIRV.h"
+#include "mlir/Dialect/AffineOps/AffineOps.h"
+#include "mlir/Dialect/LoopOps/LoopOps.h"
+#include "mlir/Dialect/SPIRV/SPIRVDialect.h"
+#include "mlir/Dialect/SPIRV/SPIRVLowering.h"
 #include "mlir/Dialect/StandardOps/Ops.h"
+#include "mlir/IR/Dialect.h"
+#include "mlir/IR/Function.h"
 #include "mlir/IR/Matchers.h"
+#include "mlir/IR/StandardTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/DebugStringHelper.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/Passes.h"
 #include "mlir/Translation.h"
+#include "llvm/ADT/Sequence.h"
+#include "llvm/Support/FormatVariadic.h"
 
 #include "base/util/logging.h"
 #include "pmlc/dialect/eltwise/dialect.h"
@@ -52,6 +62,28 @@ using mlir::Value;
 
 namespace pmlc::conversion::stripe_to_spirv {
 
+struct AffineToSPIRVLoweringPass : public mlir::ModulePass<AffineToSPIRVLoweringPass> {
+  void runOnModule() final;
+};
+
+void AffineToSPIRVLoweringPass::runOnModule() {
+  ConversionTarget target(getContext());
+  target.addLegalDialect<mlir::spirv::SPIRVDialect>();
+  target.addLegalOp<ModuleOp, mlir::ModuleTerminatorOp>();
+  target.addDynamicallyLegalOp<mlir::FuncOp>([&](mlir::FuncOp op) { return true; });
+
+  mlir::OwningRewritePatternList patterns;
+  mlir::SPIRVTypeConverter typeconverter;
+  populateAffineToStdConversionPatterns(patterns, &getContext());
+  populateLoopToStdConversionPatterns(patterns, &getContext());
+  populateStandardToSPIRVPatterns(&getContext(), typeconverter, patterns);
+
+  auto module = getModule();
+  if (failed(applyFullConversion(module, target, patterns))) signalPassFailure();
+}
+
+std::unique_ptr<mlir::Pass> createAffineToSPIRVLoweringPass() { return std::make_unique<AffineToSPIRVLoweringPass>(); }
+
 OwningModuleRef StripeLowerIntoSPIRV(ModuleOp workspace) {
   OwningModuleRef module(llvm::cast<ModuleOp>(workspace.getOperation()->clone()));
   mlir::PassManager pm(workspace.getContext());
@@ -60,6 +92,7 @@ OwningModuleRef StripeLowerIntoSPIRV(ModuleOp workspace) {
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(mlir::createCSEPass());
   pm.addPass(mlir::createConvertStripeToAffinePass());
+  pm.addPass(createAffineToSPIRVLoweringPass());
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(mlir::createCSEPass());
 

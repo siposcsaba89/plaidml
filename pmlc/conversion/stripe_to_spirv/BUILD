@@ -18,6 +18,9 @@ plaidml_cc_library(
         "//pmlc/dialect/eltwise",
         "//pmlc/dialect/stripe:passes",
         "//pmlc/conversion/stripe_to_affine",
+        "@mlir//:StandardToSPIRVConversions",
+        "@mlir//:SPIRVDialect",
+        "@mlir//:SPIRVLowering",  
     ],
     alwayslink = 1,
 )
