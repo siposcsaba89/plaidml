@@ -55,6 +55,7 @@ plaidml_cc_library(
         "//pmlc/compiler",
         "//pmlc/dialect/pxa",
         "//pmlc/dialect/stripe:transcode",
+        "//pmlc/conversion/stripe_to_spirv",
         "@mlir//:AffineToStandardTransforms",
         "@mlir//:ExecutionEngine",
         "@mlir//:ExecutionEngineUtils",

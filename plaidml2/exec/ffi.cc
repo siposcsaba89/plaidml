@@ -21,6 +21,7 @@
 #endif
 #ifdef PLAIDML_MLIR
 #include "pmlc/compiler/compiler.h"
+#include "pmlc/conversion/stripe_to_spirv/convert_stripe_to_spirv.h"
 #include "pmlc/dialect/stripe/dialect.h"
 #include "pmlc/dialect/stripe/transcode.h"
 #include "pmlc/dialect/tile/lowering.h"
@@ -50,6 +51,7 @@ using pmlc::dialect::tile::ProgramArgument;
 using StripeDialect = pmlc::dialect::stripe::Dialect;
 using pmlc::dialect::stripe::FromMLIR;
 using pmlc::dialect::tile::LowerIntoStripe;
+using pmlc::conversion::stripe_to_spirv::StripeLowerIntoSPIRV;
 using namespace mlir;  // NOLINT[build/namespaces]
 #endif
 
@@ -159,7 +161,7 @@ plaidml_strings* plaidml_targets_get(  //
     auto configs = GetConfigs().configs();
     auto strs = new plaidml_string*[configs.size()];
     size_t i = 0;
-    for (const auto& [key, value] : configs) {
+    for (const auto & [ key, value ] : configs) {
       strs[i++] = new plaidml_string{key};
     }
     return new plaidml_strings{configs.size(), strs};
@@ -239,6 +241,13 @@ plaidml_executable* plaidml_compile(  //
 
     // 1. lower tile dialect -> stripe dialect
     auto module = LowerIntoStripe(*program->program->module);
+
+    // TODO move lower stripe dialect -> SPIR-V dialect after optimization and plug SPIR-V binary to OpenCL runtime
+    if (vertexai::env::Get("PLAIDML_TEST_MLIR_SPIRV") == "1") {
+      auto module_SPIRV = StripeLowerIntoSPIRV(*module);
+      module_SPIRV->dump();
+    }
+
     // 2. convert MLIR -> stripe
     auto stripe = FromMLIR(*module);
     exec->program = GetPlatform()->MakeProgram(*ctx, device, target, stripe, &const_bufs);
