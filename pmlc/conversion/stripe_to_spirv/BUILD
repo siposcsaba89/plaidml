@@ -17,6 +17,7 @@ plaidml_cc_library(
         "//pmlc/dialect/stripe",
         "//pmlc/dialect/eltwise",
         "//pmlc/dialect/stripe:passes",
+        "//pmlc/conversion/stripe_to_affine",
     ],
     alwayslink = 1,
 )

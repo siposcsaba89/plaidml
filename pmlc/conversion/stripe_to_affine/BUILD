@@ -15,6 +15,7 @@ plaidml_cc_library(
     copts = COPTS,
     tags = ["llvm"],
     deps = [
+    	"//pmlc/dialect/tile",
         "//pmlc/dialect/stripe",
         "//pmlc/dialect/stripe:passes",
     ],

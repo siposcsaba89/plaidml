@@ -1,4 +1,5 @@
 #include "pmlc/conversion/stripe_to_spirv/convert_stripe_to_spirv.h"
+#include "pmlc/conversion/stripe_to_affine/convert_stripe_to_affine.h"
 
 #include <iostream>
 #include <memory>
@@ -58,9 +59,9 @@ OwningModuleRef StripeLowerIntoSPIRV(ModuleOp workspace) {
 
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(mlir::createCSEPass());
-  // pm.addPass(LoweringPass::Create());
-  // pm.addPass(mlir::createCanonicalizerPass());
-  // pm.addPass(mlir::createCSEPass());
+  pm.addPass(mlir::createConvertStripeToAffinePass());
+  pm.addPass(mlir::createCanonicalizerPass());
+  pm.addPass(mlir::createCSEPass());
 
   auto result = pm.run(*module);
   if (failed(result)) {

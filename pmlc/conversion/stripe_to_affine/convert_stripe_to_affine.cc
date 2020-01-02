@@ -4,10 +4,13 @@
 #include <utility>
 
 #include "pmlc/conversion/stripe_to_affine/convert_stripe_to_affine.h"
+#include "pmlc/dialect/eltwise/dialect.h"
 #include "pmlc/dialect/eltwise/types.h"
 #include "pmlc/dialect/stripe/analysis.h"
 #include "pmlc/dialect/stripe/ops.h"
 #include "pmlc/dialect/stripe/populate_tensor_ref_shape_analysis.h"
+#include "pmlc/dialect/tile/lowering.h"
+#include "pmlc/util/util.h"
 
 #include "mlir/Dialect/AffineOps/AffineOps.h"
 #include "mlir/Dialect/StandardOps/Ops.h"
@@ -15,6 +18,7 @@
 #include "mlir/EDSC/Intrinsics.h"
 #include "mlir/IR/AffineExpr.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/StandardTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 
@@ -69,7 +73,9 @@ using pmlc::dialect::stripe::TensorRefType;
 using pmlc::dialect::stripe::TerminateOp;
 using vertexai::tile::is_int;
 using vertexai::tile::is_uint;
-
+using pmlc::dialect::tile::LoweringBase;
+using pmlc::dialect::tile::LoweringContext;
+using pmlc::dialect::tile::StringRef;
 namespace {
 
 /// Analysis that computes the flat tensor access information for every refine operation.
@@ -322,6 +328,23 @@ PatternMatchResult TerminateOpConverter::matchAndRewrite(TerminateOp terminateOp
   return matchSuccess();
 }
 
+struct EltwiseOpConversion2 : public LoweringBase {
+  explicit EltwiseOpConversion2(LoweringContext* lowering, StringRef opName)  //
+      : LoweringBase(opName, lowering) {}
+
+  PatternMatchResult tryMatchAndRewrite(  //
+      Operation* op,                      //
+      llvm::ArrayRef<Value*> operands,    //
+      ConversionPatternRewriter& rewriter) const override {
+    auto t = mlir::FloatType::getF32(lowering->context);
+    auto intrinsicOp = rewriter.create<mlir::AddFOp>(op->getLoc(), t, operands[0], operands[1]);
+
+    auto rr = *intrinsicOp.getODSResults(0).begin();
+    rewriter.replaceOp(op, {rr});
+    return matchSuccess();
+  }
+};
+
 void populateStripeToAffineConversionPatterns(OwningRewritePatternList& patterns, MLIRContext* ctx,
                                               TypeConverter& typeConverter, StripeToAffineContext& convContext) {
 #define STRIPE_OP(OP) OP##Converter,
@@ -348,10 +371,17 @@ void ConvertStripeToAffine::runOnFunction() {
   OwningRewritePatternList patterns;
   populateStripeToAffineConversionPatterns(patterns, &getContext(), typeConverter, convContext);
 
+  LoweringContext lowering{&getContext()};
+  auto eltwiseOps = pmlc::util::getAllOpsWithInterface<pmlc::dialect::eltwise::EltwiseOp>(&getContext());
+  for (auto op : eltwiseOps) {
+    patterns.insert<EltwiseOpConversion2>(&lowering, op->name);
+  }
+
   // Add Affine/Std dialect legal ops to conversion target.
   mlir::ConversionTarget target(getContext());
   target.addLegalOp<mlir::ModuleOp, mlir::ModuleTerminatorOp>();
   target.addLegalDialect<mlir::AffineOpsDialect, mlir::StandardOpsDialect>();
+  // target.addLegalDialect<pmlc::dialect::eltwise::Dialect, mlir::AffineOpsDialect, mlir::StandardOpsDialect>();
   target.addDynamicallyLegalOp<mlir::FuncOp>([&](mlir::FuncOp op) {
     // FuncOp is legal only if types have been converted to Std types.
     return typeConverter.isSignatureLegal(op.getType());

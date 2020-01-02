@@ -2,58 +2,6 @@
 
 #include "pmlc/dialect/tile/lowering.h"
 
-#include <memory>
-#include <unordered_set>
-#include <vector>
-
-#include "llvm/Support/FormatVariadic.h"
-
-#include "mlir/Dialect/StandardOps/Ops.h"
-#include "mlir/IR/Matchers.h"
-#include "mlir/Pass/Pass.h"
-#include "mlir/Pass/PassManager.h"
-#include "mlir/Support/DebugStringHelper.h"
-#include "mlir/Transforms/DialectConversion.h"
-#include "mlir/Transforms/Passes.h"
-#include "mlir/Translation.h"
-
-#include "base/util/logging.h"
-#include "pmlc/dialect/eltwise/dialect.h"
-#include "pmlc/dialect/eltwise/ops.h"
-#include "pmlc/dialect/eltwise/util.h"
-#include "pmlc/dialect/stripe/affine_poly.h"
-#include "pmlc/dialect/stripe/analysis.h"
-#include "pmlc/dialect/stripe/dialect.h"
-#include "pmlc/dialect/stripe/ops.h"
-#include "pmlc/dialect/stripe/transcode.h"
-#include "pmlc/dialect/stripe/util.h"
-#include "pmlc/dialect/tile/contraction.h"
-#include "pmlc/dialect/tile/dialect.h"
-#include "pmlc/dialect/tile/ops.h"
-#include "pmlc/dialect/tile/program.h"
-#include "pmlc/util/util.h"
-
-using mlir::AbstractOperation;
-using mlir::ArrayAttr;
-using mlir::Block;
-using mlir::ConversionPattern;
-using mlir::ConversionPatternRewriter;
-using mlir::ConversionTarget;
-using mlir::FloatAttr;
-using mlir::FuncOp;
-using mlir::FunctionType;
-using mlir::Identifier;
-using mlir::MLIRContext;
-using mlir::ModuleOp;
-using mlir::OpBuilder;
-using mlir::Operation;
-using mlir::OwningModuleRef;
-using mlir::PatternBenefit;
-using mlir::PatternMatchResult;
-using mlir::ReturnOp;
-using mlir::UnknownLoc;
-using mlir::Value;
-
 namespace pmlc::dialect::tile {
 
 static stripe::TensorType convertIntoTensorType(Type type) {
@@ -84,66 +32,26 @@ static eltwise::ScalarConstantOp createInit(OpBuilder* builder, Location loc, Ty
   return builder->create<eltwise::ScalarConstantOp>(loc, constType, static_cast<int64_t>(value));
 }
 
-struct TypeConverter : public mlir::TypeConverter {
-  using mlir::TypeConverter::convertType;
-
-  Type convertType(Type type) override {
-    IVLOG(2, "TypeConverter::convertType> " << mlir::debugString(type));
-    if (type.isa<FunctionType>()) {
-      IVLOG(4, "  FunctionType");
-      return type;
-    }
-    if (type.isa<RankedTensorType>()) {
-      IVLOG(4, "  RankedTensorType");
-      return stripe::TensorRefType::get(convertIntoTensorType(type));
-    }
-    if (type.isa<stripe::TensorType>()) {
-      IVLOG(4, "  TensorType");
-      return type;
-    }
-    if (type.isa<stripe::TensorRefType>()) {
-      IVLOG(4, "  TensorRefType");
-      return type;
-    }
-    return {};
+Type TypeConverter::convertType(Type type) {
+  IVLOG(2, "TypeConverter::convertType> " << mlir::debugString(type));
+  if (type.isa<FunctionType>()) {
+    IVLOG(4, "  FunctionType");
+    return type;
   }
-};
-
-struct LoweringContext {
-  explicit LoweringContext(MLIRContext* context) : context(context) {}
-
-  MLIRContext* context;
-  TypeConverter typeConverter;
-  std::vector<StringAttr> names;
-};
-
-struct LoweringBase : public ConversionPattern {
-  LoweringBase(                   //
-      StringRef rootOpName,       //
-      LoweringContext* lowering,  //
-      PatternBenefit benefit = 1)
-      : ConversionPattern(rootOpName, benefit, lowering->context), lowering(lowering) {}
-
-  PatternMatchResult matchAndRewrite(   //
-      Operation* op,                    //
-      llvm::ArrayRef<Value*> operands,  //
-      ConversionPatternRewriter& rewriter) const final {
-    try {
-      return tryMatchAndRewrite(op, operands, rewriter);
-    } catch (const std::exception& ex) {
-      op->emitError(ex.what());
-      return matchFailure();
-    }
+  if (type.isa<RankedTensorType>()) {
+    IVLOG(4, "  RankedTensorType");
+    return stripe::TensorRefType::get(convertIntoTensorType(type));
   }
-
- protected:
-  virtual PatternMatchResult tryMatchAndRewrite(  //
-      Operation* op,                              //
-      llvm::ArrayRef<Value*> operands, ConversionPatternRewriter& rewriter) const = 0;
-
- protected:
-  LoweringContext* lowering;
-};
+  if (type.isa<stripe::TensorType>()) {
+    IVLOG(4, "  TensorType");
+    return type;
+  }
+  if (type.isa<stripe::TensorRefType>()) {
+    IVLOG(4, "  TensorRefType");
+    return type;
+  }
+  return {};
+}
 
 struct AffineConstantOpConversion : public LoweringBase {
   explicit AffineConstantOpConversion(LoweringContext* lowering)  //
@@ -258,11 +166,11 @@ struct ContractionOpConversion : public LoweringBase {
 
     Contraction contraction{cionOp};
     bool no_reduce = cionOp.no_reduce().hasValue();
-    const auto& [bounds, constraints] = contraction.ComputeBounds(shapes, no_reduce);
+    const auto & [ bounds, constraints ] = contraction.ComputeBounds(shapes, no_reduce);
 
     // add induction vars
     llvm::SmallVector<int64_t, 8> ranges;
-    for (const auto& [key, value] : bounds) {
+    for (const auto & [ key, value ] : bounds) {
       uint64_t range = value.max - value.min + 1;
       ranges.emplace_back(range);
     }
@@ -291,7 +199,7 @@ struct ContractionOpConversion : public LoweringBase {
 
     stripe::SymbolValueMap idxs;
     llvm::SmallVector<Attribute, 8> idxNames;
-    for (const auto& [key, value] : bounds) {
+    for (const auto & [ key, value ] : bounds) {
       auto arg = body->addArgument(stripe::AffineType::get(rewriter.getContext()));
       idxNames.emplace_back(rewriter.getStringAttr(key));
       idxs.emplace(key, arg);
@@ -442,7 +350,7 @@ struct ContractionOpConversion : public LoweringBase {
     for (const auto& constraint : constraints) {
       stripe::AffinePolynomial poly{constraint};
       bool any_inputs = false;
-      for (const auto& [key, value] : poly.terms) {
+      for (const auto & [ key, value ] : poly.terms) {
         if (!outIdxs.count(key)) {
           any_inputs = true;
         }
