@@ -324,23 +324,29 @@ PatternMatchResult StoreOpConverter::matchAndRewrite(StoreOp storeOp, ArrayRef<V
 // must be implemented in the Op providing the context.
 PatternMatchResult TerminateOpConverter::matchAndRewrite(TerminateOp terminateOp, ArrayRef<Value*> operands,
                                                          ConversionPatternRewriter& rewriter) const {
-  rewriter.replaceOpWithNewOp<mlir::AffineTerminatorOp>(terminateOp);
+  // The last terminateOp in functionOp should be replaced by std.return, otherwise the last block will not properly
+  // return when lowering the Affine module to full Standard module.
+  if (llvm::isa<mlir::FuncOp>(terminateOp.getParentOp())) {
+    rewriter.replaceOpWithNewOp<mlir::ReturnOp>(terminateOp);
+  } else {
+    rewriter.replaceOpWithNewOp<mlir::AffineTerminatorOp>(terminateOp);
+  }
   return matchSuccess();
 }
 
-struct EltwiseOpConversion2 : public LoweringBase {
-  explicit EltwiseOpConversion2(LoweringContext* lowering, StringRef opName)  //
+struct EltwiseOpToStandardConversion : public LoweringBase {
+  explicit EltwiseOpToStandardConversion(LoweringContext* lowering, StringRef opName)  //
       : LoweringBase(opName, lowering) {}
 
   PatternMatchResult tryMatchAndRewrite(  //
       Operation* op,                      //
       llvm::ArrayRef<Value*> operands,    //
       ConversionPatternRewriter& rewriter) const override {
-    auto t = mlir::FloatType::getF32(lowering->context);
-    auto intrinsicOp = rewriter.create<mlir::AddFOp>(op->getLoc(), t, operands[0], operands[1]);
+    auto float32_type = mlir::FloatType::getF32(lowering->context);
+    auto addfop = rewriter.create<mlir::AddFOp>(op->getLoc(), float32_type, operands[0], operands[1]);
 
-    auto rr = *intrinsicOp.getODSResults(0).begin();
-    rewriter.replaceOp(op, {rr});
+    auto result_type = *addfop.getODSResults(0).begin();
+    rewriter.replaceOp(op, {result_type});
     return matchSuccess();
   }
 };
@@ -374,14 +380,13 @@ void ConvertStripeToAffine::runOnFunction() {
   LoweringContext lowering{&getContext()};
   auto eltwiseOps = pmlc::util::getAllOpsWithInterface<pmlc::dialect::eltwise::EltwiseOp>(&getContext());
   for (auto op : eltwiseOps) {
-    patterns.insert<EltwiseOpConversion2>(&lowering, op->name);
+    patterns.insert<EltwiseOpToStandardConversion>(&lowering, op->name);
   }
 
   // Add Affine/Std dialect legal ops to conversion target.
   mlir::ConversionTarget target(getContext());
   target.addLegalOp<mlir::ModuleOp, mlir::ModuleTerminatorOp>();
   target.addLegalDialect<mlir::AffineOpsDialect, mlir::StandardOpsDialect>();
-  // target.addLegalDialect<pmlc::dialect::eltwise::Dialect, mlir::AffineOpsDialect, mlir::StandardOpsDialect>();
   target.addDynamicallyLegalOp<mlir::FuncOp>([&](mlir::FuncOp op) {
     // FuncOp is legal only if types have been converted to Std types.
     return typeConverter.isSignatureLegal(op.getType());

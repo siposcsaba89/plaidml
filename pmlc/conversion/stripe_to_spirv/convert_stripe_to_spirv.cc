@@ -9,6 +9,7 @@
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
 #include "mlir/Conversion/LoopToStandard/ConvertLoopToStandard.h"
 #include "mlir/Conversion/StandardToSPIRV/ConvertStandardToSPIRV.h"
+#include "mlir/Conversion/StandardToSPIRV/ConvertStandardToSPIRVPass.h"
 #include "mlir/Dialect/AffineOps/AffineOps.h"
 #include "mlir/Dialect/LoopOps/LoopOps.h"
 #include "mlir/Dialect/SPIRV/SPIRVDialect.h"
@@ -62,27 +63,86 @@ using mlir::Value;
 
 namespace pmlc::conversion::stripe_to_spirv {
 
-struct AffineToSPIRVLoweringPass : public mlir::ModulePass<AffineToSPIRVLoweringPass> {
+// Standard to SPIR-V pass
+struct StandardToSPIRVLoweringPass : public mlir::ModulePass<StandardToSPIRVLoweringPass> {
   void runOnModule() final;
 };
 
-void AffineToSPIRVLoweringPass::runOnModule() {
+void StandardToSPIRVLoweringPass::runOnModule() {
   ConversionTarget target(getContext());
+  mlir::SPIRVTypeConverter typeConverter;
+  mlir::OwningRewritePatternList patterns;
+
   target.addLegalDialect<mlir::spirv::SPIRVDialect>();
   target.addLegalOp<ModuleOp, mlir::ModuleTerminatorOp>();
-  target.addDynamicallyLegalOp<mlir::FuncOp>([&](mlir::FuncOp op) { return true; });
+  target.addDynamicallyLegalOp<mlir::FuncOp>([&](mlir::FuncOp op) {
+    // FuncOp is legal only if types have been converted to SPIR-V types.
+    // return typeConverter.isSignatureLegal(op.getType());
+    return true;
+  });
+
+  populateStandardToSPIRVPatterns(&getContext(), typeConverter, patterns);
+
+  auto module = getModule();
+  if (failed(applyFullConversion(module, target, patterns))) signalPassFailure();
+}
+std::unique_ptr<mlir::Pass> createStandardToSPIRVLoweringPass() {
+  return std::make_unique<StandardToSPIRVLoweringPass>();
+}
+
+// Standard+Loop to full Standard pass
+struct LoopToStandardLoweringPass : public mlir::FunctionPass<LoopToStandardLoweringPass> {
+  void runOnFunction() final;
+};
+
+void LoopToStandardLoweringPass::runOnFunction() {
+  ConversionTarget target(getContext());
+  target.addLegalDialect<mlir::StandardOpsDialect>();
+  target.addLegalOp<ModuleOp, mlir::ModuleTerminatorOp>();
+
+  mlir::TypeConverter typeConverter;
+  target.addDynamicallyLegalOp<mlir::FuncOp>([&](mlir::FuncOp op) {
+    // FuncOp is legal only if types have been converted to Std types.
+    return typeConverter.isSignatureLegal(op.getType());
+  });
 
   mlir::OwningRewritePatternList patterns;
-  mlir::SPIRVTypeConverter typeconverter;
-  populateAffineToStdConversionPatterns(patterns, &getContext());
   populateLoopToStdConversionPatterns(patterns, &getContext());
-  populateStandardToSPIRVPatterns(&getContext(), typeconverter, patterns);
+
+  auto function = getFunction();
+  if (failed(applyFullConversion(function, target, patterns))) signalPassFailure();
+}
+
+std::unique_ptr<mlir::Pass> createLoopToStandardLoweringPass() {
+  return std::make_unique<LoopToStandardLoweringPass>();
+}
+
+// Affine+Eltwise to Standard+Loop pass
+struct AffineToStandardLoweringPass : public mlir::ModulePass<AffineToStandardLoweringPass> {
+  void runOnModule() final;
+};
+
+void AffineToStandardLoweringPass::runOnModule() {
+  ConversionTarget target(getContext());
+  target.addLegalDialect<mlir::loop::LoopOpsDialect, mlir::StandardOpsDialect>();
+  target.addLegalOp<ModuleOp, mlir::ModuleTerminatorOp>();
+
+  mlir::TypeConverter typeConverter;
+  target.addDynamicallyLegalOp<mlir::FuncOp>([&](mlir::FuncOp op) {
+    // FuncOp is legal only if types have been converted to Std types.
+    return typeConverter.isSignatureLegal(op.getType());
+  });
+
+  mlir::OwningRewritePatternList patterns;
+  populateAffineToStdConversionPatterns(patterns, &getContext());
 
   auto module = getModule();
   if (failed(applyFullConversion(module, target, patterns))) signalPassFailure();
 }
 
-std::unique_ptr<mlir::Pass> createAffineToSPIRVLoweringPass() { return std::make_unique<AffineToSPIRVLoweringPass>(); }
+std::unique_ptr<mlir::Pass> createAffineToStandardLoweringPass() {
+  return std::make_unique<AffineToStandardLoweringPass>();
+}
 
 OwningModuleRef StripeLowerIntoSPIRV(ModuleOp workspace) {
   OwningModuleRef module(llvm::cast<ModuleOp>(workspace.getOperation()->clone()));
@@ -92,7 +152,17 @@ OwningModuleRef StripeLowerIntoSPIRV(ModuleOp workspace) {
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(mlir::createCSEPass());
   pm.addPass(mlir::createConvertStripeToAffinePass());
-  pm.addPass(createAffineToSPIRVLoweringPass());
+
+  pm.addPass(createAffineToStandardLoweringPass());
+  pm.addPass(createLoopToStandardLoweringPass());
+  // pm.addPass(createStandardToSPIRVLoweringPass());
+
+  /*
+  pm.addPass(mlir::createLowerAffinePass());
+  pm.addPass(mlir::createLowerToCFGPass());
+  pm.addPass(mlir::createConvertStandardToSPIRVPass());
+  pm.addPass(mlir::createLegalizeStdOpsForSPIRVLoweringPass());
+  */
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(mlir::createCSEPass());
 
