@@ -11,6 +11,7 @@ plaidml_cc_library(
     deps = [
         "//pmlc/compiler",
         "//pmlc/conversion/pxa_to_affine",
+        "//pmlc/dialect/xsmm",
         "@llvm-project//mlir:AffineToStandardTransforms",
         "@llvm-project//mlir:LLVMTransforms",
     ],
