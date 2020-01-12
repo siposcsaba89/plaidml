@@ -21,6 +21,8 @@ plaidml_cc_library(
         "@mlir//:StandardToSPIRVConversions",
         "@mlir//:SPIRVDialect",
         "@mlir//:SPIRVLowering",  
+        "@mlir//:LoopsToGPUPass",
+        "@mlir//:GPUToSPIRVTransforms",
     ],
     alwayslink = 1,
 )

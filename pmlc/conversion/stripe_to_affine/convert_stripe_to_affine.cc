@@ -7,6 +7,7 @@
 #include "pmlc/dialect/eltwise/dialect.h"
 #include "pmlc/dialect/eltwise/types.h"
 #include "pmlc/dialect/stripe/analysis.h"
+#include "pmlc/dialect/stripe/dialect.h"
 #include "pmlc/dialect/stripe/ops.h"
 #include "pmlc/dialect/stripe/populate_tensor_ref_shape_analysis.h"
 #include "pmlc/dialect/tile/lowering.h"
@@ -343,12 +344,57 @@ struct EltwiseOpToStandardConversion : public LoweringBase {
       llvm::ArrayRef<Value*> operands,    //
       ConversionPatternRewriter& rewriter) const override {
     auto float32_type = mlir::FloatType::getF32(lowering->context);
+
     auto addfop = rewriter.create<mlir::AddFOp>(op->getLoc(), float32_type, operands[0], operands[1]);
 
     auto result_type = *addfop.getODSResults(0).begin();
     rewriter.replaceOp(op, {result_type});
     return matchSuccess();
   }
+};
+
+struct FuncOpConversion : public OpConversionPattern<FuncOp> {
+  FuncOpConversion(MLIRContext* ctx, TypeConverter& converter) : OpConversionPattern(ctx), converter(converter) {}
+
+  /// Hook for derived classes to implement combined matching and rewriting.
+  PatternMatchResult matchAndRewrite(FuncOp funcOp, ArrayRef<Value*> operands,
+                                     ConversionPatternRewriter& rewriter) const override {
+    FunctionType type = funcOp.getType();
+
+    // Convert the original function arguments.
+    TypeConverter::SignatureConversion result(type.getNumInputs());
+    for (unsigned i = 0, e = type.getNumInputs(); i != e; ++i)
+      if (failed(converter.convertSignatureArg(i, type.getInput(i), result))) return matchFailure();
+
+    // Convert the original function results.
+    SmallVector<Type, 1> convertedResults;
+    if (failed(converter.convertTypes(type.getResults(), convertedResults))) return matchFailure();
+
+    // Create a new function with an updated signature.
+    auto newFuncOp = rewriter.cloneWithoutRegions(funcOp);
+    rewriter.inlineRegionBefore(funcOp.getBody(), newFuncOp.getBody(), newFuncOp.end());
+    newFuncOp.setType(FunctionType::get(result.getConvertedTypes(), convertedResults, funcOp.getContext()));
+
+    // Remove Stripe attributes
+    auto stripeName = rewriter.getIdentifier(pmlc::dialect::stripe::Dialect::getDialectAttrName("name"));
+    auto stripeLayout = rewriter.getIdentifier(pmlc::dialect::stripe::Dialect::getDialectAttrName("layout"));
+
+    for (unsigned i = 0; i < type.getNumInputs(); i++) {
+      newFuncOp.removeArgAttr(i, stripeName);
+      newFuncOp.removeArgAttr(i, stripeLayout);
+    }
+    newFuncOp.removeAttr(pmlc::dialect::stripe::Dialect::getStripeAttrsName());
+    newFuncOp.removeAttr("inputs");
+    newFuncOp.removeAttr("outputs");
+
+    // Tell the rewriter to convert the region signature.
+    rewriter.applySignatureConversion(&newFuncOp.getBody(), result);
+    rewriter.eraseOp(funcOp);
+    return matchSuccess();
+  }
+
+  /// The type converter to use when rewriting the signature.
+  TypeConverter& converter;
 };
 
 void populateStripeToAffineConversionPatterns(OwningRewritePatternList& patterns, MLIRContext* ctx,
@@ -359,7 +405,8 @@ void populateStripeToAffineConversionPatterns(OwningRewritePatternList& patterns
 #include "supported_ops.inc"  // NOLINT(build/include)
       >(ctx, convContext);
 
-  mlir::populateFuncOpTypeConversionPattern(patterns, ctx, typeConverter);
+  patterns.insert<FuncOpConversion>(ctx, typeConverter);
+  // mlir::populateFuncOpTypeConversionPattern(patterns, ctx, typeConverter);
 }
 
 // Pass to convert Stripe dialect to Affine dialect.

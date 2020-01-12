@@ -7,7 +7,9 @@
 #include <vector>
 
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
+#include "mlir/Conversion/GPUToSPIRV/ConvertGPUToSPIRVPass.h"
 #include "mlir/Conversion/LoopToStandard/ConvertLoopToStandard.h"
+#include "mlir/Conversion/LoopsToGPU/LoopsToGPUPass.h"
 #include "mlir/Conversion/StandardToSPIRV/ConvertStandardToSPIRV.h"
 #include "mlir/Conversion/StandardToSPIRV/ConvertStandardToSPIRVPass.h"
 #include "mlir/Dialect/AffineOps/AffineOps.h"
@@ -144,6 +146,104 @@ std::unique_ptr<mlir::Pass> createAffineToStandardLoweringPass() {
   return std::make_unique<AffineToStandardLoweringPass>();
 }
 
+// test Conversion from Loop+standard to SPIR-V
+class testLoopConversion final : public mlir::SPIRVOpLowering<mlir::loop::ForOp> {
+ public:
+  using SPIRVOpLowering<mlir::loop::ForOp>::SPIRVOpLowering;
+
+  PatternMatchResult matchAndRewrite(mlir::loop::ForOp forop, mlir::ArrayRef<Value*> operands,
+                                     ConversionPatternRewriter& rewriter) const override;
+};
+
+PatternMatchResult testLoopConversion::matchAndRewrite(mlir::loop::ForOp forop, mlir::ArrayRef<Value*> operands,
+                                                       ConversionPatternRewriter& rewriter) const {
+  auto valueAttr1 = rewriter.getIntegerAttr(rewriter.getIndexType(), 0);
+  auto valueAttr2 = rewriter.getIntegerAttr(rewriter.getIndexType(), 3);
+  auto constant_op1 = rewriter.create<mlir::ConstantOp>(forop.getLoc(), rewriter.getIndexType(), valueAttr1);
+  auto constant_op2 = rewriter.create<mlir::ConstantOp>(forop.getLoc(), rewriter.getIndexType(), valueAttr2);
+
+  auto induction_var = forop.getInductionVar();
+  induction_var->replaceAllUsesWith(constant_op1.getResult());
+
+  auto for_operation = forop.getOperation();
+  auto first_inner_op = for_operation->getRegion(0).getBlocks().begin()->getOperations().begin();
+  auto inner_forop = llvm::cast<mlir::loop::ForOp>(first_inner_op);
+  if (!inner_forop) {
+    throw std::runtime_error("First operation in outer for-loop is not ForOp!!");
+  }
+  auto inner_for_operation = inner_forop.getOperation();
+
+  // mergeBlocks currently is not supported in ConversionPatternRewriter
+  // rewriter.mergeBlocks(&newblock, rewriter.getBlock(), argValues);
+
+  // replace block argument
+  mlir::Block& inner_block = *(inner_for_operation->getRegion(0).getBlocks().begin());
+  auto inner_block_arg = *inner_block.getArguments().begin();
+  inner_block_arg->replaceAllUsesWith(constant_op2.getResult());
+
+  auto outer_region = rewriter.getBlock()->getParent();
+  rewriter.inlineRegionBefore(inner_for_operation->getRegion(0), *outer_region, outer_region->end());
+
+  // merge block
+  auto dest_block = rewriter.getBlock();
+  auto it_dest = dest_block->end();
+  it_dest--;
+  dest_block->getOperations().splice(it_dest, inner_block.getOperations());
+  inner_block.dropAllUses();
+  inner_block.erase();
+
+  // erase two layers of loop
+  rewriter.eraseOp(forop);
+  rewriter.eraseOp(inner_forop);
+  return matchSuccess();
+}
+
+class testLoopTerminatorConversion final : public mlir::SPIRVOpLowering<mlir::loop::TerminatorOp> {
+ public:
+  using SPIRVOpLowering<mlir::loop::TerminatorOp>::SPIRVOpLowering;
+
+  PatternMatchResult matchAndRewrite(mlir::loop::TerminatorOp terminatorop, mlir::ArrayRef<Value*> operands,
+                                     ConversionPatternRewriter& rewriter) const override;
+};
+
+PatternMatchResult testLoopTerminatorConversion::matchAndRewrite(mlir::loop::TerminatorOp terminatorop,
+                                                                 mlir::ArrayRef<Value*> operands,
+                                                                 ConversionPatternRewriter& rewriter) const {
+  rewriter.eraseOp(terminatorop);
+  return matchSuccess();
+}
+
+void populateTestPatterns(MLIRContext* context, mlir::SPIRVTypeConverter& typeConverter,
+                          mlir::OwningRewritePatternList& patterns) {
+  patterns.insert<testLoopConversion, testLoopTerminatorConversion>(context, typeConverter);
+}
+
+struct TestSPIRVPass : public mlir::ModulePass<TestSPIRVPass> {
+  void runOnModule() final;
+};
+
+void TestSPIRVPass::runOnModule() {
+  ConversionTarget target(getContext());
+  target.addLegalDialect<mlir::spirv::SPIRVDialect, mlir::StandardOpsDialect>();
+  target.addLegalOp<ModuleOp, mlir::ModuleTerminatorOp>();
+
+  // mlir::TypeConverter typeConverter;
+  target.addDynamicallyLegalOp<mlir::FuncOp>([&](mlir::FuncOp op) {
+    // FuncOp is legal only if types have been converted to Std types.
+    // return typeConverter.isSignatureLegal(op.getType());
+    return true;
+  });
+
+  mlir::SPIRVTypeConverter typeConverter;
+  mlir::OwningRewritePatternList patterns;
+  populateTestPatterns(&getContext(), typeConverter, patterns);
+
+  auto module = getModule();
+  if (failed(applyFullConversion(module, target, patterns))) signalPassFailure();
+}
+
+std::unique_ptr<mlir::Pass> createTestSPIRVPass() { return std::make_unique<TestSPIRVPass>(); }
+
 OwningModuleRef StripeLowerIntoSPIRV(ModuleOp workspace) {
   OwningModuleRef module(llvm::cast<ModuleOp>(workspace.getOperation()->clone()));
   mlir::PassManager pm(workspace.getContext());
@@ -154,15 +254,33 @@ OwningModuleRef StripeLowerIntoSPIRV(ModuleOp workspace) {
   pm.addPass(mlir::createConvertStripeToAffinePass());
 
   pm.addPass(createAffineToStandardLoweringPass());
-  pm.addPass(createLoopToStandardLoweringPass());
+  pm.addPass(mlir::createCanonicalizerPass());
+  pm.addPass(mlir::createCSEPass());
+
+  pm.addPass(createTestSPIRVPass());
+  pm.addPass(mlir::createCanonicalizerPass());
+  pm.addPass(mlir::createCSEPass());
+
+  // pm.addPass(createLoopToStandardLoweringPass());
   // pm.addPass(createStandardToSPIRVLoweringPass());
 
   /*
-  pm.addPass(mlir::createLowerAffinePass());
-  pm.addPass(mlir::createLowerToCFGPass());
-  pm.addPass(mlir::createConvertStandardToSPIRVPass());
-  pm.addPass(mlir::createLegalizeStdOpsForSPIRVLoweringPass());
+  std::vector<int64_t> wg = {1, 1};
+  std::vector<int64_t> gs = {3, 3};
+  mlir::ArrayRef<int64_t> numWorkGroups(wg);
+  mlir::ArrayRef<int64_t> workGroupSize(gs);
+  pm.addPass(mlir::createLoopToGPUPass(numWorkGroups, workGroupSize));
   */
+
+  // pm.addPass(mlir::createCanonicalizerPass());
+  // pm.addPass(mlir::createCSEPass());
+
+  // pm.addPass(mlir::createConvertGPUToSPIRVPass(workGroupSize));
+  // pm.addPass(mlir::createLowerAffinePass());
+  // pm.addPass(mlir::createLowerToCFGPass());
+  // pm.addPass(mlir::createConvertStandardToSPIRVPass());
+  // pm.addPass(mlir::createLegalizeStdOpsForSPIRVLoweringPass());
+
   pm.addPass(mlir::createCanonicalizerPass());
   pm.addPass(mlir::createCSEPass());
 

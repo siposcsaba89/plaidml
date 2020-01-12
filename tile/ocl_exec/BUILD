@@ -14,6 +14,8 @@ plaidml_cc_library(
         "//tile/lang",
         "//tile/targets",
         "//tile/util",
+        "//pmlc/conversion/stripe_to_spirv",
+        "@mlir//:SPIRVSerialization", 
         "@boost//:filesystem",
     ],
 )

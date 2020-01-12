@@ -3,16 +3,18 @@
 #include "tile/hal/opencl/compiler.h"
 
 #include <exception>
+#include <map>
 #include <memory>
+#include <set>
 #include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include <boost/asio.hpp>
+#include <boost/bind.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/thread.hpp>
-#include <boost/bind.hpp>
-#include <boost/asio.hpp>
 
 #include "base/util/callback_map.h"
 #include "base/util/compat.h"
@@ -38,11 +40,9 @@ struct BuildState;
 // Represents a build-in-flight
 class Build {
  public:
-  Build(context::Activity activity, const std::shared_ptr<DeviceState>& device_state, 
-        const std::map<std::string, CLObj<cl_program>>& program,
-        const std::vector<lang::KernelInfo>& kernel_info,
-        const std::map<std::string, proto::BuildInfo>& binfo,
-        std::vector<context::proto::ActivityID> kernel_ids);
+  Build(context::Activity activity, const std::shared_ptr<DeviceState>& device_state,
+        const std::map<std::string, CLObj<cl_program>>& program, const std::vector<lang::KernelInfo>& kernel_info,
+        const std::map<std::string, proto::BuildInfo>& binfo, std::vector<context::proto::ActivityID> kernel_ids);
 
   boost::future<std::unique_ptr<hal::Library>> Start();
   std::unique_ptr<Library>& library() { return library_; }
@@ -61,7 +61,7 @@ class Build {
 };
 
 struct BuildState {
-  BuildState(Build* b, const std::string& c): build(b), current(c) {}
+  BuildState(Build* b, const std::string& c) : build(b), current(c) {}
   Build* build;
   std::string current;
 };
@@ -72,16 +72,16 @@ void Build::CompileKernel(std::shared_ptr<BuildState> build_state) {
   cl_device_id device_id = build_state->build->device_state()->did();
   clock_t build_start = clock();
   Err err = ocl::BuildProgram(prog_it->second.get(), 1, &device_id,
-    "-cl-fast-relaxed-math -cl-mad-enable -cl-unsafe-math-optimizations", 
-    &OnBuildComplete, (void *)(build_state.get()));
+                              "-cl-fast-relaxed-math -cl-mad-enable -cl-unsafe-math-optimizations", &OnBuildComplete,
+                              reinterpret_cast<void*>(build_state.get()));
   clock_t build_end = clock();
   if (env::Get("PLAIDML_BUILD_TIMES") == "1") {
-    double elapsed_secs = double(build_end - build_start) / CLOCKS_PER_SEC;
+    double elapsed_secs = static_cast<double>(build_end - build_start) / CLOCKS_PER_SEC;
     std::cout << "Built " << prog_it->first << " in " << elapsed_secs << " seconds.\n";
   }
   if (err) {
-    LOG(WARNING) << "Failed to build program " <<  prog_it->first << ": " << err;
-    OnBuildComplete(prog_it->second.get(), (void *)(build_state.get()));
+    LOG(WARNING) << "Failed to build program " << prog_it->first << ": " << err;
+    OnBuildComplete(prog_it->second.get(), reinterpret_cast<void*>(build_state.get()));
   }
 }
 
@@ -98,17 +98,18 @@ boost::future<std::unique_ptr<hal::Library>> Build::Start() {
     io_service.post(boost::bind(&(Build::CompileKernel), bs));
   }
   // Create thread pool and threads
-  unsigned int n_threads = (env::Get("OPENCL_BUILD_THREADS") == "") ? 
-    boost::thread::hardware_concurrency() : std::atoi(env::Get("OPENCL_BUILD_THREADS").c_str());
+  unsigned int n_threads = (env::Get("OPENCL_BUILD_THREADS") == "")
+                               ? boost::thread::hardware_concurrency()
+                               : std::atoi(env::Get("OPENCL_BUILD_THREADS").c_str());
   for (size_t i = 0; i < n_threads; ++i) {
     threads.create_thread(boost::bind(&boost::asio::io_service::run, &io_service));
   }
-  
+
   threads.join_all();
   io_service.stop();
   clock_t build_end = clock();
   if (env::Get("PLAIDML_BUILD_TIMES") == "1") {
-    double elapsed_secs = double(build_end - build_start) / CLOCKS_PER_SEC;
+    double elapsed_secs = static_cast<double>(build_end - build_start) / CLOCKS_PER_SEC;
     std::cout << "Total compilation time: " << elapsed_secs << " seconds\n";
   }
   prom_.set_value(std::move(library_));
@@ -116,17 +117,15 @@ boost::future<std::unique_ptr<hal::Library>> Build::Start() {
 }
 
 Build::Build(context::Activity activity, const std::shared_ptr<DeviceState>& device_state,
-             const std::map<std::string, CLObj<cl_program>>& program,
-             const std::vector<lang::KernelInfo>& kernel_info,
-             const std::map<std::string, proto::BuildInfo>& binfo,
-             std::vector<context::proto::ActivityID> kernel_ids)
+             const std::map<std::string, CLObj<cl_program>>& program, const std::vector<lang::KernelInfo>& kernel_info,
+             const std::map<std::string, proto::BuildInfo>& binfo, std::vector<context::proto::ActivityID> kernel_ids)
     : activity_{std::move(activity)},
       device_state_{device_state},
       library_{std::make_unique<Library>(device_state, std::move(program), kernel_info, std::move(kernel_ids))},
       binfo_{std::move(binfo)} {}
 
 void Build::OnBuildComplete(cl_program program, void* handle) noexcept {
-  BuildState* build_state = static_cast<BuildState *>(handle);
+  BuildState* build_state = static_cast<BuildState*>(handle);
   if (!build_state) {
     // no-op, this handle has already been processed.
     return;
@@ -135,8 +134,8 @@ void Build::OnBuildComplete(cl_program program, void* handle) noexcept {
   Build* build = build_state->build;
   try {
     cl_build_status status;
-    Err::Check(ocl::GetProgramBuildInfo(program, build->device_state()->did(),
-                                        CL_PROGRAM_BUILD_STATUS, sizeof(status), &status, nullptr),
+    Err::Check(ocl::GetProgramBuildInfo(program, build->device_state()->did(), CL_PROGRAM_BUILD_STATUS, sizeof(status),
+                                        &status, nullptr),
                "Unable to construct program build status");
     if (status != CL_BUILD_SUCCESS) {
       LOG(WARNING) << "Failed to build program " << build_state->current;
@@ -163,7 +162,7 @@ std::string WithLineNumbers(const std::string& src) {
 void Build::OnError(const std::string& current) {
   size_t len = 0;
   auto prog_it = library_->program().find(current);
-  
+
   Err bi_err =
       ocl::GetProgramBuildInfo(prog_it->second.get(), device_state_->did(), CL_PROGRAM_BUILD_LOG, 0, nullptr, &len);
   if (bi_err != CL_SUCCESS) {
@@ -173,7 +172,7 @@ void Build::OnError(const std::string& current) {
     bi_err = ocl::GetProgramBuildInfo(prog_it->second.get(), device_state_->did(), CL_PROGRAM_BUILD_LOG, len,
                                       const_cast<char*>(buffer.c_str()), nullptr);
     if (bi_err) {
-      LOG(ERROR) << "Failed to retrieve build log for" <<  prog_it->first << ": " << bi_err;
+      LOG(ERROR) << "Failed to retrieve build log for" << prog_it->first << ": " << bi_err;
     } else {
       auto& bi = binfo_[prog_it->first];
       LOG(WARNING) << "Failed build log: " << buffer;
@@ -181,7 +180,7 @@ void Build::OnError(const std::string& current) {
       bi.set_log(buffer);
     }
   }
-  
+
   throw std::runtime_error{"Unable to compile Tile program"};
 }
 
@@ -207,8 +206,8 @@ boost::future<std::unique_ptr<hal::Library>> Compiler::Build(const context::Cont
 
   if (!kernel_info.size()) {
     return boost::make_ready_future(std::unique_ptr<hal::Library>{
-        std::make_unique<Library>(device_state_, std::map<std::string, CLObj<cl_program>>{}, 
-                                  kernel_info, std::vector<context::proto::ActivityID>{})});
+        std::make_unique<Library>(device_state_, std::map<std::string, CLObj<cl_program>>{}, kernel_info,
+                                  std::vector<context::proto::ActivityID>{})});
   }
 
   context::Activity activity{ctx, "tile::hal::opencl::Build"};
@@ -294,7 +293,21 @@ boost::future<std::unique_ptr<hal::Library>> Compiler::Build(const context::Cont
         WriteFile(src_path, code.str());
       }
       Err err;
-      CLObj<cl_program> program = ocl::CreateProgramWithSource(device_state_->cl_ctx().get(), 1, &buf, nullptr, err.ptr());
+
+      CLObj<cl_program> program;
+
+      auto use_il = env::Get("PLAIDML_TEST_SPIRV");
+      if (use_il.length()) {
+        auto spv_binary_path = env_cache + "/spv_module_out.spv";
+        auto spv_binary_str = ReadFile(spv_binary_path, true);
+        const void* spv_binary = spv_binary_str.c_str();
+
+        std::cout << "CreateProgramWithIL" << std::endl;
+        program = ocl::CreateProgramWithIL(device_state_->cl_ctx().get(), spv_binary, spv_binary_str.size(), err.ptr());
+      } else {
+        program = ocl::CreateProgramWithSource(device_state_->cl_ctx().get(), 1, &buf, nullptr, err.ptr());
+      }
+
       if (!program) {
         throw std::runtime_error(std::string("Creating an OpenCL program object for ") + ki.kname + ": " + err.str());
       }
@@ -309,7 +322,8 @@ boost::future<std::unique_ptr<hal::Library>> Compiler::Build(const context::Cont
 
     kernel_ids.emplace_back(kbuild.ctx().activity_id());
   }
-  opencl::Build build(std::move(activity), device_state_, std::move(program_map), kernel_info, std::move(binfo_map), std::move(kernel_ids));
+  opencl::Build build(std::move(activity), device_state_, std::move(program_map), kernel_info, std::move(binfo_map),
+                      std::move(kernel_ids));
   return build.Start();
 }
 
