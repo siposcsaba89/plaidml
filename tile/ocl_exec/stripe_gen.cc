@@ -74,9 +74,9 @@ lang::KernelList GenerateProgram(                    //
       module_SPIRV = mlir::spirv::deserialize(binary, &ctx).getValue();
     } else {
       auto module_stripe = IntoMLIR(&ctx, *stripe);
-      auto module = *StripeLowerIntoSPIRV(*module_stripe);
-      module.dump();
+      auto module = StripeLowerIntoSPIRV(*module_stripe);
       module_SPIRV = llvm::cast<mlir::spirv::ModuleOp>(module);
+      module_SPIRV.dump();
     }
 
     //  spirv::serialize

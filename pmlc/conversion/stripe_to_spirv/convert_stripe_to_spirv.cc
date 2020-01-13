@@ -281,8 +281,8 @@ OwningModuleRef StripeLowerIntoSPIRV(ModuleOp workspace) {
   // pm.addPass(mlir::createConvertStandardToSPIRVPass());
   // pm.addPass(mlir::createLegalizeStdOpsForSPIRVLoweringPass());
 
-  pm.addPass(mlir::createCanonicalizerPass());
-  pm.addPass(mlir::createCSEPass());
+  // pm.addPass(mlir::createCanonicalizerPass());
+  // pm.addPass(mlir::createCSEPass());
 
   auto result = pm.run(*module);
   if (failed(result)) {
