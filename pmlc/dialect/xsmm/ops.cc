@@ -13,7 +13,6 @@
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Support/DebugStringHelper.h"
 
-#include "base/util/logging.h"
 #include "pmlc/util/util.h"
 
 #define DEBUG_TYPE "xsmm"

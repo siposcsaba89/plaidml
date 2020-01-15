@@ -14,7 +14,6 @@
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/Support/DebugStringHelper.h"
 
-#include "base/util/logging.h"
 #include "pmlc/dialect/xsmm/ops.h"
 
 #define DEBUG_TYPE "xsmm"

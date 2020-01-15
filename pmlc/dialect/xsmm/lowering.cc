@@ -6,7 +6,6 @@
 #include "mlir/Support/DebugStringHelper.h"
 #include "mlir/Transforms/DialectConversion.h"
 
-#include "base/util/logging.h"
 #include "pmlc/dialect/xsmm/dialect.h"
 #include "pmlc/dialect/xsmm/ops.h"
 #include "pmlc/dialect/xsmm/passes.h"
