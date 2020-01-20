@@ -116,3 +116,7 @@ ENV/
 
 # Source code tagging tools
 tags
+
+# cmake build directories
+b/
+build/
