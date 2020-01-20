@@ -5,8 +5,19 @@ project(base)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 
-set(CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL MinSizeRel Release)
-set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO RelWithDebInfo Release)
+find_package(gflags REQUIRED CONFIG)
+#find easylogging++
+find_path(EASYLOGGINGPP_INCLUDE NAMES easylogging++.h)
+find_path(EASYLOGGINGPP_SRC NAMES easylogging++.cc)
+
+if (EASYLOGGINGPP_INCLUDE AND EASYLOGGINGPP_SRC)
+    set(easyloggingpp_FOUND TRUE)
+    message(STATUS "Found easylogging!")
+else()
+    set(easyloggingpp_FOUND FALSE)
+    message(FATAL_ERROR "Not found easylogging!")
+endif()
+
 
 
 set(PUBLIC_HDRS
@@ -25,20 +36,19 @@ set(SRCS
     dbgsync.cc
     shape.cc
     validate.cc
+    ${EASYLOGGINGPP_SRC}/easylogging++.cc
 )
-
-
-find_package(gflags REQUIRED CONFIG)
 
 add_library(base ${PUBLIC_HDRS} ${SRCS})
 add_library(plaidml::base ALIAS base)
 
 target_include_directories(base PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../..>
-    $<INSTALL_INTERFACE:include>
+    $<INSTALL_INTERFACE:include/plaidml>
+    ${EASYLOGGINGPP_INCLUDE}
 )
 
-target_link_libraries(base PUBLIC gflags_static)
+target_link_libraries(base PUBLIC gflags_static plaidml::proto_lib)
 
 set_target_properties(base PROPERTIES FOLDER base)
 
