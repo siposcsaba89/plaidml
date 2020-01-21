@@ -2,10 +2,18 @@ cmake_minimum_required(VERSION 3.0)
 
 project(base)
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
-
 find_package(gflags REQUIRED CONFIG)
+
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND MSVC)
+       set(Boost_COMPILER -vc141)
+       #set(Boost_USE_DEBUG_RUNTIME OFF)
+endif()
+set(Boost_USE_STATIC_LIBS OFF)
+set(Boost_USE_MULTITHREADED ON)
+set(Boost_USE_STATIC_RUNTIME OFF)
+find_package(Boost 1.40 REQUIRED)
+
+
 #find easylogging++
 find_path(EASYLOGGINGPP_INCLUDE NAMES easylogging++.h)
 find_path(EASYLOGGINGPP_SRC NAMES easylogging++.cc)
@@ -17,8 +25,6 @@ else()
     set(easyloggingpp_FOUND FALSE)
     message(FATAL_ERROR "Not found easylogging!")
 endif()
-
-
 
 set(PUBLIC_HDRS
     buffer.h
@@ -39,25 +45,68 @@ set(SRCS
     ${EASYLOGGINGPP_SRC}/easylogging++.cc
 )
 
-add_library(base ${PUBLIC_HDRS} ${SRCS})
-add_library(plaidml::base ALIAS base)
 
-target_include_directories(base PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../..>
-    $<INSTALL_INTERFACE:include/plaidml>
-    ${EASYLOGGINGPP_INCLUDE}
+paidml_add_library(base
+    PUBLIC_HEADERS
+        ${PUBLIC_HDRS}
+    SRCS
+        ${SRCS}
+    FOLDER
+        tile
+    PUBLIC_DEPS
+        gflags_static
+        plaidml::proto_lib
+        plaidml::context
+        plaidml::util
+        Boost::boost
+        Boost::thread
 )
 
-target_link_libraries(base PUBLIC gflags_static plaidml::proto_lib)
+paidml_add_library(schedule
+    PUBLIC_HEADERS
+        schedule.h
+    SRCS
+        schedule.cc
+    FOLDER
+        tile
+    PUBLIC_DEPS
+        plaidml::proto_lib
+        plaidml::context
+        plaidml::util
+)
 
-set_target_properties(base PROPERTIES FOLDER base)
+paidml_add_library(program_cache
+    PUBLIC_HEADERS
+        program_cache.h
+    SRCS
+        program_cache.cc
+    FOLDER
+        tile
+    PUBLIC_DEPS
+        Boost::boost
+        Boost::disable_autolinking
+        plaidml::base
+        plaidml::support
+        plaidml::stripe_proto_lib
+        #plaidml::lang
+    PRIVATE_DEFS
+        -DNOMINMAX
+        -DBOOST_THREAD_PROVIDES_FUTURE
+)
 
-if (BUILD_SHARED_LIBS)
-    set_target_properties(${PROJECT_NAME} PROPERTIES CXX_VISIBILITY_PRESET hidden)
-    set_target_properties(${PROJECT_NAME} PROPERTIES VISIBILITY_INLINES_HIDDEN 1)
-endif()
-
-if (MSVC)
-    target_compile_options(${PROJECT_NAME} PRIVATE "/MP")
-endif()
-
+#needs adding test
+#plaidml_cc_library(
+#    name = "platform_test",
+#    testonly = True,
+#    srcs = ["platform_test.cc"],
+#    hdrs = ["platform_test.h"],
+#    visibility = ["//visibility:public"],
+#    deps = [
+#        ":base",
+#        "//testing:matchers",
+#        "//tile/proto:support",
+#        "@gmock//:gtest",
+#        "@half",
+#    ],
+#    alwayslink = True,
+#)

@@ -24,7 +24,7 @@ bu::uuid GetVertexAIUUID(const char* name) {
 bu::uuid GetRandomUUID() {
   static std::mutex random_uuid_mu;
   static boost::mt19937 twister{std::random_device()()};
-  static bu::random_generator random_uuid_gen{twister};
+  static bu::basic_random_generator<boost::mt19937> random_uuid_gen{twister};
 
   std::lock_guard<std::mutex> lock{random_uuid_mu};
   return random_uuid_gen();
