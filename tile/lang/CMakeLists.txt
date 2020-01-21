@@ -78,11 +78,19 @@ set(SRCS
     #:parser_lex
 )
 
+find_package(BISON REQUIRED)
+find_package(FLEX REQUIRED)
+bison_target(MyParser tile.y ${CMAKE_CURRENT_BINARY_DIR}/parser.y.cpp
+             DEFINES_FILE ${CMAKE_CURRENT_BINARY_DIR}/parser.y.h)
+flex_target(MyScanner tile.lex  ${CMAKE_CURRENT_BINARY_DIR}/parser_lex.h)
+add_flex_bison_dependency(MyScanner MyParser)
 paidml_add_library(lang
     PUBLIC_HEADERS
         ${PUBLIC_HDRS}
     SRCS
         ${SRCS}
+        ${BISON_MyParser_OUTPUTS}
+        ${FLEX_MyScanner_OUTPUTS}
     FOLDER
         tile
     PUBLIC_DEPS
@@ -94,6 +102,7 @@ paidml_add_library(lang
         Boost::boost
     PRIVATE_DEFS
         -DNOMINMAX
+        -DYY_NO_UNISTD_H
 )
 
 #plaidml_cc_test(
