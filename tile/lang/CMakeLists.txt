@@ -78,11 +78,17 @@ set(SRCS
     #:parser_lex
 )
 
+#https://cmake.org/cmake/help/v3.16/module/FindFLEX.html
+#win_flex.exe --outfile=tile/lang/parser_lex.cpp --wincompat --header-file=tile/lang/parser_lex.h ../tile/lang/tile.lex
+#win_bison.exe -d -v ../tile/lang/tile.y -o tile/lang/parser.y.cpp
+
 find_package(BISON REQUIRED)
 find_package(FLEX REQUIRED)
 bison_target(MyParser tile.y ${CMAKE_CURRENT_BINARY_DIR}/parser.y.cpp
-             DEFINES_FILE ${CMAKE_CURRENT_BINARY_DIR}/parser.y.h)
-flex_target(MyScanner tile.lex  ${CMAKE_CURRENT_BINARY_DIR}/parser_lex.h)
+             DEFINES_FILE ${CMAKE_CURRENT_BINARY_DIR}/parser.y.h COMPILE_FLAGS "-d")
+flex_target(MyScanner tile.lex  ${CMAKE_CURRENT_BINARY_DIR}/parser_lex.cpp 
+    DEFINES_FILE ${CMAKE_CURRENT_BINARY_DIR}/parser_lex.h
+    COMPILE_FLAGS "--wincompat")
 add_flex_bison_dependency(MyScanner MyParser)
 paidml_add_library(lang
     PUBLIC_HEADERS
@@ -91,6 +97,7 @@ paidml_add_library(lang
         ${SRCS}
         ${BISON_MyParser_OUTPUTS}
         ${FLEX_MyScanner_OUTPUTS}
+        ${CMAKE_CURRENT_BINARY_DIR}/parser_lex.h
     FOLDER
         tile
     PUBLIC_DEPS
@@ -102,7 +109,6 @@ paidml_add_library(lang
         Boost::boost
     PRIVATE_DEFS
         -DNOMINMAX
-        -DYY_NO_UNISTD_H
 )
 
 #plaidml_cc_test(

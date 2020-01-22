@@ -1,8 +1,8 @@
 // Copyright 2017-2018 Intel Corporation.
 
+#include <google/protobuf/util/time_util.h>
 #include "tile/hal/opencl/result.h"
 
-#include <google/protobuf/util/time_util.h>
 
 #include <utility>
 

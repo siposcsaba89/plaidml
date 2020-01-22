@@ -15,9 +15,9 @@ paidml_add_library(codegen
         plaidml::util
         plaidml::stripe
         plaidml::bilp
-        plaidml::cpu
-        plaidml::passes
-        plaidml::transcode
+        #plaidml::cpu
+        #plaidml::passes
+        #plaidml::transcode
         Boost::filesystem
 
     PRIVATE_DEFS

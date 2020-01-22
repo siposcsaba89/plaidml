@@ -9,6 +9,9 @@ add_subdirectory(lang)
 add_subdirectory(lang/ast)
 
 
+add_subdirectory(hal/util)
+add_subdirectory(hal/opencl)
+
 
 add_subdirectory(codegen)
 

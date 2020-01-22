@@ -21,7 +21,7 @@ endif()
 set(Boost_USE_STATIC_LIBS OFF)
 set(Boost_USE_MULTITHREADED ON)
 set(Boost_USE_STATIC_RUNTIME OFF)
-find_package(Boost 1.40 REQUIRED  COMPONENTS filesystem thread)
+find_package(Boost 1.40 REQUIRED  COMPONENTS filesystem thread regex)
 
 find_package(jsoncpp REQUIRED CONFIG)
 #https://github.com/nmoinvaz/minizip fixing cmake config
@@ -124,6 +124,13 @@ protobuf_generate(
     LANGUAGE cpp
     TARGET codegen_proto_lib
     PROTOS tile/codegen/codegen.proto)
+
+
+paidml_add_library(opencl_proto_lib FOLDER protobuf PUBLIC_DEPS protobuf::libprotobuf)
+protobuf_generate(
+    LANGUAGE cpp
+    TARGET opencl_proto_lib
+    PROTOS tile/hal/opencl/opencl.proto)
 
 
 add_subdirectory(base)

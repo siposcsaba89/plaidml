@@ -1,7 +1,8 @@
 // Copyright 2017-2018 Intel Corporation.
 
-#include "tile/hal/opencl/compiler.h"
 
+#include <boost/asio.hpp>
+#include "tile/hal/opencl/compiler.h"
 #include <exception>
 #include <memory>
 #include <sstream>
@@ -12,7 +13,6 @@
 #include <boost/filesystem.hpp>
 #include <boost/thread.hpp>
 #include <boost/bind.hpp>
-#include <boost/asio.hpp>
 
 #include "base/util/callback_map.h"
 #include "base/util/compat.h"

@@ -32,4 +32,6 @@ paidml_add_library(ast
         Boost::boost
     PRIVATE_DEFS
         -DNOMINMAX
+        -DBOOST_THREAD_PROVIDES_FUTURE
+
 )
