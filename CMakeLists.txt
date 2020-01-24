@@ -28,6 +28,22 @@ find_package(jsoncpp REQUIRED CONFIG)
 find_package(minizip REQUIRED CONFIG)
 find_package(GTest REQUIRED CONFIG)
 
+find_package(LLVM REQUIRED CONFIG)
+
+find_program (JSON_NET_EXECUTABLE jsonnet)
+
+if (NOT JSON_NET_EXECUTABLE)
+    message(FATAL_ERROR "Cannot find jsonnet")
+else()
+    message(STATUS "jsonnet executable found : ${JSON_NET_EXECUTABLE}")
+endif()
+
+find_package (Python3 COMPONENTS Interpreter REQUIRED)
+message(STATUS "Python executable found: ${PYTHON_EXECUTABLE}")
+find_package(TBB REQUIRED)
+find_package(xsmm REQUIRED)
+
+
 #generate protobuf stuff
 
 function(paidml_add_library LIBRARY_NAME)
