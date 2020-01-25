@@ -16,4 +16,5 @@ add_subdirectory(targets/cpu)
 
 
 add_subdirectory(codegen)
+add_subdirectory(ocl_exec)
 

@@ -39,6 +39,7 @@ set(SRCS
     perf_counter.cc
     uuid.cc
     zipfile.cc
+    ${EASYLOGGINGPP_SRC}/easylogging++.cc
 )
 
 paidml_add_library(util
@@ -51,6 +52,7 @@ paidml_add_library(util
     PUBLIC_DEPS
         Boost::boost
         Boost::filesystem
+        Boost::disable_autolinking
         #Boost::stacktrace
         gflags_static
         jsoncpp_lib

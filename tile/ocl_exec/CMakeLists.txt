@@ -1,28 +1,31 @@
 cmake_minimum_required(VERSION 3.0)
 project(proto)
 
-file(GLOB CODEGEN_SRCS *.cc *.h)
+set(SRCS
+    emitsem.cc
+    emitsem.h
+    intrinsic.cc
+    intrinsic.h
+    kern_info.cc
+    kern_info.h
+    stripe_gen.cc
+    stripe_gen.h
+)
 
-
-paidml_add_library(codegen
+paidml_add_library(ocl_exec
     SRCS
-        ${CODEGEN_SRCS}
+        ${SRCS}
     FOLDER
         tile
     PUBLIC_DEPS
-        plaidml::codegen_proto_lib
-        plaidml::config
+        plaidml::base
+        plaidml::codegen
+        plaidml::lang
+        plaidml::targets
         plaidml::util
-        plaidml::stripe
-        plaidml::bilp
-        plaidml::cpu
-        #plaidml::passes
-        #plaidml::transcode
         Boost::filesystem
-
     PRIVATE_DEFS
         -DNOMINMAX
-        -DBOOST_THREAD_PROVIDES_FUTURE
 )
 
 

@@ -5,6 +5,10 @@ python pip install pystache
 https://github.com/hfp/libxsmm
 https://github.com/intel/tbb.git
 https://github.com/google/jsonnet.git
+https://raw.githubusercontent.com/melowntech/half/master/half/half.hpp
+
+protobuf cmake:
+-Dprotobuf_MSVC_STATIC_RUNTIME=0
 
 
 

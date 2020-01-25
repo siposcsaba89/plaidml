@@ -21,7 +21,7 @@ endif()
 set(Boost_USE_STATIC_LIBS OFF)
 set(Boost_USE_MULTITHREADED ON)
 set(Boost_USE_STATIC_RUNTIME OFF)
-find_package(Boost 1.40 REQUIRED  COMPONENTS filesystem thread regex)
+find_package(Boost 1.40 REQUIRED  COMPONENTS filesystem thread regex program_options)
 
 find_package(jsoncpp REQUIRED CONFIG)
 #https://github.com/nmoinvaz/minizip fixing cmake config
@@ -42,6 +42,29 @@ find_package (Python3 COMPONENTS Interpreter REQUIRED)
 message(STATUS "Python executable found: ${PYTHON_EXECUTABLE}")
 find_package(TBB REQUIRED)
 find_package(xsmm REQUIRED)
+
+
+find_package(OpenCL REQUIRED)
+add_library(::opencl SHARED IMPORTED)
+set_property(TARGET ::opencl PROPERTY IMPORTED_IMPLIB_RELEASE ${OpenCL_LIBRARY})
+set_property(TARGET ::opencl PROPERTY IMPORTED_LOCATION_RELEASE ${OpenCL_LIBRARY})
+set_property(TARGET ::opencl PROPERTY IMPORTED_CONFIGURATIONS RELEASE)
+set_property(TARGET ::opencl PROPERTY INTERFACE_INCLUDE_DIRECTORIES
+    $<INSTALL_INTERFACE:${OpenCL_INCLUDE_DIR}>  # <prefix>/include/mylib
+    $<BUILD_INTERFACE:${OpenCL_INCLUDE_DIR}>  # <prefix>/include/mylib
+)
+
+#find easylogging++
+find_path(EASYLOGGINGPP_INCLUDE NAMES easylogging++.h)
+find_path(EASYLOGGINGPP_SRC NAMES easylogging++.cc)
+
+if (EASYLOGGINGPP_INCLUDE AND EASYLOGGINGPP_SRC)
+    set(easyloggingpp_FOUND TRUE)
+    message(STATUS "Found easylogging!")
+else()
+    set(easyloggingpp_FOUND FALSE)
+    message(FATAL_ERROR "Not found easylogging!")
+endif()
 
 
 #generate protobuf stuff
@@ -92,6 +115,35 @@ function(paidml_add_library LIBRARY_NAME)
     endif()
 
 endfunction()
+
+
+function(jsonnet_to_json OUT_FILE_NEMES OUT_FILE IN_FILE)
+    set(O_F ${CMAKE_CURRENT_BINARY_DIR}/${OUT_FILE})
+    add_custom_command(OUTPUT ${O_F}
+      COMMAND ${JSON_NET_EXECUTABLE} ARGS -o ${O_F} "${CMAKE_CURRENT_SOURCE_DIR}/${IN_FILE}"
+        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+      DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${IN_FILE}"
+      COMMENT "Running jsonnet to ${IN_FILE}"
+      VERBATIM
+)
+    set(${OUT_FILE_NEMES} ${O_F} PARENT_SCOPE)
+endfunction()
+
+
+function(heatmap OUT_FILE_NEMES OUT_FILE HEAT_MAP_CSV HEATMAP_TEMPLATE)
+    set(O_F ${CMAKE_CURRENT_BINARY_DIR}/${OUT_FILE})
+    add_custom_command(
+            OUTPUT
+                ${O_F}
+            DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${HEAT_MAP_CSV} ${CMAKE_CURRENT_SOURCE_DIR}/${HEATMAP_TEMPLATE}
+            COMMAND Python3::Interpreter "${CMAKE_SOURCE_DIR}/tools/heatmap/heatmap.py" "${CMAKE_CURRENT_SOURCE_DIR}/${HEAT_MAP_CSV}" "${CMAKE_CURRENT_SOURCE_DIR}/${HEATMAP_TEMPLATE}" "${O_F}"
+            COMMENT "Generating heatmap for ${HEAT_MAP_CSV}"
+    )
+    set(${OUT_FILE_NEMES} ${O_F} PARENT_SCOPE)
+endfunction()
+
+
+
 
 
 #paidml_add_library(alma PUBLIC_HEADERS alma.h alma2.h alma3.h $<INSTALL_INTERFACE:${alma_SAdasd}> FOLDER kosar)
@@ -150,4 +202,5 @@ protobuf_generate(
 
 
 add_subdirectory(base)
+add_subdirectory(tools/gencfg)
 add_subdirectory(tile)
