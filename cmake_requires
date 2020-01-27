@@ -8,8 +8,11 @@ https://github.com/google/jsonnet.git
 https://raw.githubusercontent.com/melowntech/half/master/half/half.hpp
 
 protobuf cmake:
--Dprotobuf_MSVC_STATIC_RUNTIME=0
+cmake ../cmake/ -DCMAKE_INSTALL_PREFIX=/d/projects/github/3rdparty_plaidml/ -Dprotobuf_MSVC
+_STATIC_RUNTIME=0 -DCMAKE_DEBUG_POSTFIX=_d -Dprotobuf_BUILD_TESTS=OFF
 
+googletest:
+cmake ../ -DCMAKE_DEBUG_POSTFIX=_d -DCMAKE_INSTALL_PREFIX=/d/projects/github/3rdparty_plaidml/ -Dgtest_force_shared_crt=1
 
 
 

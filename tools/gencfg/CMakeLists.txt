@@ -1,6 +1,7 @@
 project(gencfg)
 
 add_executable(gencfg gencfg.cc)
+add_executable(plaidml::gencfg ALIAS gencfg)
 target_link_libraries(gencfg PRIVATE
     plaidml::config
     plaidml::util

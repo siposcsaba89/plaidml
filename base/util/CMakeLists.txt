@@ -57,6 +57,9 @@ paidml_add_library(util
         gflags_static
         jsoncpp_lib
         MINIZIP::minizip
+    PUBLIC_DEFS
+        -DELPP_THREAD_SAFE
+        -DBOOST_THREAD_PROVIDES_FUTURE
 )
 target_compile_definitions(util PRIVATE -DNOMINMAX)
 

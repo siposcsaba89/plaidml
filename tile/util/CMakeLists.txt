@@ -1,14 +1,16 @@
 cmake_minimum_required(VERSION 3.0)
 project(proto)
 
-set(SRCS
-    lib.h
-    lib.cc
-    tests.h
-    tests.cc
+
+set(PUBLIC_HDRS
+    tile_file.h
 )
 
-paidml_add_library(tile_lib
+set(SRCS
+    tile_file.cc
+)
+
+paidml_add_library(tile_util
     PUBLIC_HEADERS
         ${PUBLIC_HDRS}
     SRCS
@@ -16,10 +18,11 @@ paidml_add_library(tile_lib
     FOLDER
         tile
     PUBLIC_DEPS
+        plaidml::util
         plaidml::lang
-        plaidml::tile_util
-        #//plaidml2/edsl:edsl_mli
+        plaidml::proto_lib
         Boost::boost
+        Boost::filesystem
     PRIVATE_DEFS
         -DNOMINMAX
 )

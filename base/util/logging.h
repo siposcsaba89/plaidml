@@ -2,7 +2,9 @@
 
 #pragma once
 
-#define ELPP_THREAD_SAFE
+#if !defined(ELPP_THREAD_SAFE)
+  #define ELPP_THREAD_SAFE
+#endif
 #define ELPP_CUSTOM_COUT std::cerr
 #define ELPP_STL_LOGGING
 #define ELPP_LOG_STD_ARRAY

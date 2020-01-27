@@ -144,6 +144,18 @@ endfunction()
 
 
 
+function(generate_config OUT_FILE_NEMES OUT_FILE IDENTIFIER INPUT_FILES)
+    set(O_F ${CMAKE_CURRENT_BINARY_DIR}/${OUT_FILE})
+    add_custom_command(
+            OUTPUT ${O_F}
+            DEPENDS ${INPUT_FILES}
+            COMMAND plaidml::gencfg ${INPUT_FILES} "--identifier=${IDENTIFIER}" "--out=${O_F}"
+            COMMENT "Generating config files"
+    )
+    set(${OUT_FILE_NEMES} ${O_F} PARENT_SCOPE)
+endfunction()
+
+
 
 
 #paidml_add_library(alma PUBLIC_HEADERS alma.h alma2.h alma3.h $<INSTALL_INTERFACE:${alma_SAdasd}> FOLDER kosar)

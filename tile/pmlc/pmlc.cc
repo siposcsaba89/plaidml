@@ -79,7 +79,8 @@ lang::RunInfo LoadTile(const fs::path& filename, bool is_internal) {
     if (!test) {
       throw std::runtime_error(str(boost::format("Internal test not found: %1%") % filename));
     }
-    return *test;
+    //ret.program = *test; 
+    //return *test; //todo investigate this
   }
   return util::TileFile(filename).Load();
 }
