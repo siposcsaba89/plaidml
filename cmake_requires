@@ -14,7 +14,8 @@ _STATIC_RUNTIME=0 -DCMAKE_DEBUG_POSTFIX=_d -Dprotobuf_BUILD_TESTS=OFF
 googletest:
 cmake ../ -DCMAKE_DEBUG_POSTFIX=_d -DCMAKE_INSTALL_PREFIX=/d/projects/github/3rdparty_plaidml/ -Dgtest_force_shared_crt=1
 
-
+llvm
+cmake ..\llvm -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_BUILD_EXAMPLES=OFF -DLLVM_TARGETS_TO_BUILD="host" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_INSTALL_PREFIX=./intsall_mlir -DLLVM_USE_CRT_Release=MD -G Ninja -DCMAKE_DEBUG_POSTFIX=_d -DCMAKE_BUILD_TYPE=Release
 
 
 
