@@ -156,8 +156,6 @@ function(generate_config OUT_FILE_NEMES OUT_FILE IDENTIFIER INPUT_FILES)
 endfunction()
 
 
-
-
 #paidml_add_library(alma PUBLIC_HEADERS alma.h alma2.h alma3.h $<INSTALL_INTERFACE:${alma_SAdasd}> FOLDER kosar)
 
 
@@ -212,7 +210,28 @@ protobuf_generate(
     TARGET opencl_proto_lib
     PROTOS tile/hal/opencl/opencl.proto)
 
+list(APPEND CMAKE_MODULE_PATH ${LLVM_CMAKE_DIR})
+include(TableGen)
+# MLIR project.
+set(MLIR_MAIN_SRC_DIR ${CMAKE_SOURCE_DIR} ) # --src-root
+set(MLIR_INCLUDE_DIR ${CMAKE_SOURCE_DIR}) # --includedir
+set(MLIR_TABLEGEN_EXE mlir-tblgen)
+
+set(MLIR_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+set(MLIR_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
+
+function(mlir_tablegen ofn)
+  tablegen(MLIR ${ARGV} "-I${MLIR_MAIN_SRC_DIR}" "-I${MLIR_INCLUDE_DIR}")
+  set(TABLEGEN_OUTPUT ${TABLEGEN_OUTPUT} ${CMAKE_CURRENT_BINARY_DIR}/${ofn}
+      PARENT_SCOPE)
+endfunction()
 
 add_subdirectory(base)
 add_subdirectory(tools/gencfg)
+
+#--------------PMLC--------------
+add_subdirectory(pmlc/util)
+add_subdirectory(pmlc/dialect/eltwise/ir)
+#--------------PMLC--------------
+
 add_subdirectory(tile)
